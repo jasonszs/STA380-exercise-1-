@@ -1,0 +1,623 @@
+---
+title: "Exercises 1"
+author: "Wenying Hu, Xueru Rong, Zhaoshun (Jason) Su"
+date: "August 9, 2018"
+output: html_document
+---
+
+# Probability practice
+## Part A
+
+\begin{align}
+&P(RC)=0.3\\
+&P(TC)=1-0.3=0.7\\
+&P(Yes)=0.65\\
+&P(No)=0.35\\
+&P(Yes \ and \ RC)=P(Yes|RC) \times P(RC)=0.5*0.3=0.15\\
+&P(No \ and \ RC)=P(RC)-P(Yes \ and \ RC)=0.3-0.15=0.15\\
+&P(Yes|TC)=\frac{P(Yes \ and \ TC)}{P(TC)}=\frac{P(Yes)-P(Yes \ and \ RC)}{0.7}=\frac{0.65-0.15}{0.7}=0.714\\
+\end{align}
+
+## Part B
+
+\begin{align}
+&P(Pos|D)=0.993\\
+&P(Neg|D')=0.9999\\
+&P(Pos|D')=1-P(N|D')=0.0001\\
+&P(D)=0.000025\\
+&P(D')=1-P(D)=0.999975\\
+&P(D|Pos)=\frac{P(D \ and \ Pos)}{P(Pos)}=\frac{P(D \ and \ Pos)}{P(D \ and \ Pos)+P(D' \ and \ Pos)}=\frac{P(Pos|D) \times P(D)}{P(Pos|D) \times P(D)+P(Pos|D') \times P(D')}\\
+&=\frac{0.993 \times 0.000025}{0.993 \times 0.000025+0.0001 \times 0.999975}=0.1985\\
+\end{align}
+
+Problems in implementing a universal testing policy:
+
+1. The probability of having the disease when getting positive result is actually not high. The result might cause unnecessary panic;
+2. All assumed probabilities need to be very accurate which might be hard to achieve in reality.
+
+
+
+# Exploratory analysis: green buildings
+
+
+```{r warning=FALSE,message=FALSE}
+library(ggplot2)
+dat=read.csv("greenbuildings.csv")
+```
+
+## 1. Is it reasonable to remoeve low occupied outliers?
+###*"I decided to remove these buildings from consideration, on the theory that these buildings  might have something weird going on with them, and could potentially distort the analysis."*
+
+```{r }
+par(mfrow=c(1,2))
+greenbuilding = dat[,-c(12,13)]
+greenbuilding$green_rating = factor(greenbuilding$green_rating)
+greenbuilding$cluster = factor(greenbuilding$cluster)
+ggplot(greenbuilding, aes(x=leasing_rate, y=Rent)) + geom_point()+ggtitle("Rent vs. occupancy rate with outliers")
+
+mask = which(greenbuilding$leasing_rate > 10)
+greenbuilding = greenbuilding[mask,]
+ggplot(greenbuilding, aes(x=leasing_rate, y=Rent)) + geom_point()+ggtitle("Rent vs. occupancy rate without outliers")
+```
+
+### From the scatterplot we can see that there is a specific pattern when x is small. Therefore, it is correct to remove the outliers.
+
+## 2. Should we use median or mean?
+### *"I used the median rather than the mean, because there were still some outliers in the data, and the median is a lot more robust to outliers."*
+```{r }
+ggplot(greenbuilding,aes(x=Rent))+geom_density()+ggtitle("Density plot of rent with outliers")
+
+mask2 = which(greenbuilding$Rent > 75)
+paste("The number of outliers is",length(mask2))
+outliers = greenbuilding[mask2,]
+remain = greenbuilding[-mask2,]
+
+```
+
+### We decided to use median or mean mainly based on the distribution and size of the dataset. From the first plot, we could see that the number of outliers is not small and the density plot is right-skewed. Therefore, it might be better to use median to measure the central tendency of the dataset. However, without the outliers the distribution of the dataset is quiet normally distributed which might be caused by its large size. So let's try to dig into these outliers to check whether it is reasonable to remove them. We could also see that if we are able to remove them, the distribution is much more normally ditributed.
+
+```{r warning=FALSE,message=FALSE}
+library(gridExtra)
+
+paste("The mean of rent of outliers is ",mean(outliers$Rent),", while the mean of rent of all buildings is ",mean(greenbuilding$Rent))
+paste("The mean of stories of outliers is ",mean(outliers$stories),", while the mean of stories of all buildings is ",mean(greenbuilding$stories))
+paste("The number of green buildings among outliers is ",sum(outliers$green_rating=="1"),", while the number of outliers is ",dim(outliers)[1],". The fraction is ",sum(outliers$green_rating=="1")/dim(outliers)[1])
+
+rent_set = data.frame(ca=c("Outliers","All"),
+                      rent=c(mean(outliers$Rent),mean(greenbuilding$Rent)))
+p1=ggplot(data=rent_set,aes(x=ca,y=rent,fill=ca))+geom_bar(stat="identity")+ggtitle("Comparison of Rent")
+
+story_set = data.frame(ca=c("Outliers","All"),
+                      story=c(mean(outliers$stories),mean(greenbuilding$stories)))
+p2=ggplot(data=story_set,aes(x=ca,y=story,fill=ca))+geom_bar(stat="identity")+ggtitle("Comparison of Story")
+
+number_set = data.frame(ca=c("Green","Non Green"),
+                      number=c(sum(outliers$green_rating=="1"),dim(outliers)[1]-sum(outliers$green_rating=="1")))
+p3=ggplot(number_set,aes(x="",y=number,fill=ca))+geom_bar(width = 1, stat = "identity")+coord_polar("y", start=0)+ggtitle("GB Among Outliers")
+
+grid.arrange(p1,p2,p3, ncol=3)
+```
+
+### From the graphs, we can see that first, most of these outliers have significantly higher rent than the average level. And then most of them have specifically high stories level which might be the reason of extremely high rent. Considering we are estimating for a 15-story building. These outliers might be less valuable for analysis. In addition, among these outliers, there exist few green buildings, which means we are not able to compare green and non-green building among these outleirs.In conclusion, we might not miss insight even if we remove these outliers.
+
+```{r}
+ggplot(remain,aes(x=Rent))+geom_density()+ggtitle("Density plot of rent without outliers")
+```
+
+### After removing these outliers, the distribution of rent approximates to normal distribution and the data size is still large enough. In this case, we are able to use "mean" to estimate central tendency in later analysis.
+
+
+## 3. Should we just compare the mean rent of buildings from all areas?
+###*"The median market rent in the non-green buildings was $25 per square foot per year, while the median market rent in the green buildings was $27.60 per square foot per year"*
+
+```{r warning=FALSE,message=FALSE}
+library(dplyr)
+
+mean_rent_green = remain %>% group_by(cluster) %>% 
+  summarise(diff=mean(Rent[green_rating==1])-mean(Rent[green_rating==0]))
+
+ggplot(data=mean_rent_green, aes(x=cluster, y=diff)) +
+  geom_bar(stat="identity",position=position_dodge())+ggtitle("Difference of rent between green and non-green within different clusters")
+```
+
+### From the result we can see that the difference of median price of green and non-green buildings vary a lot. Therefore, we need to find out which cluster this building belongs to and estimate the price again based on its cluster.
+
+## 4. Future Estimation
+### *"The median market rent in the non-green buildings was $25 per square foot per year, while the median market rent in the green buildings was $27.60 per square foot per year: about $2.60 more per square foot."*
+
+### Instead of revenue, we might be more interested in the future profit, which means we should also consider about the cost and the occupancy rate.
+
+```{r }
+remain["profit"]=remain["Rent"]-remain["Gas_Costs"]-remain["Electricity_Costs"]
+remain=remain[,-c(19,20)]
+
+profit_set = remain %>% group_by(green_rating) %>% summarise(mean_profit=mean(profit),mean_occupied=mean(leasing_rate))
+p1=ggplot(data=profit_set,aes(x=green_rating,y=mean_profit,fill=green_rating))+geom_bar(stat="identity")+ggtitle("Comparison of mean rent")
+p2=ggplot(data=profit_set,aes(x=green_rating,y=mean_occupied,fill=green_rating))+geom_bar(stat="identity")+ggtitle("Comparison of occupied rate")
+profit_set
+grid.arrange(p1,p2, ncol=2)
+```
+
+### Based on the results above, a normal building might gain an additional 
+### $250000*(29.3163*0.8935 - 27.2548*0.8429) = 805261$
+### dollars of extra revenue per year if we buil the green building.
+### Therefore, we might be able to recuperate the extra $5 million cost in around 6.2 years. Since the building will be able to earn rents for more than 30 years, "going green" is probably a good investment. 
+
+
+# Bootstrapping
+
+## Setting up the dataset including these five ETFs from 2007-01-01
+```{r warning=FALSE,message=FALSE}
+library(mosaic)
+library(quantmod)
+library(foreach)
+
+#Import the needed stocks data from 2007-01-01
+stocks_list = c("SPY","TLT","LQD","EEM","VNQ")
+getSymbols(stocks_list,from="2007-01-01")
+
+SPYa = adjustOHLC(SPY)
+TLTa = adjustOHLC(TLT)
+LQDa = adjustOHLC(LQD)
+EEMa = adjustOHLC(EEM)
+VNQa = adjustOHLC(VNQ)
+```
+
+## Estimate the risk/return properties of the five major asset classes. Here we just show the process of handling the SPY because the processes of other ETFs are the same. We will just store the result and display them together in the latter part.
+```{r }
+set.seed("666666")
+
+all_returns = ClCl(SPYa)
+
+all_returns = as.matrix(na.omit(all_returns))
+
+initial_wealth = 100000
+simSPY = foreach(i=1:5000, .combine='rbind') %do% {
+	total_wealth = initial_wealth
+	holdings = total_wealth
+	n_days = 20
+	wealthtracker = rep(0, n_days)
+	for(today in 1:n_days) {
+		return.today = resample(all_returns,1, orig.ids=FALSE)
+		holdings = holdings + holdings*return.today
+		total_wealth = sum(holdings)
+		wealthtracker[today] = total_wealth
+	}
+	wealthtracker
+}
+
+
+
+# Calculate 5% value at risk
+SPYVar=quantile(simSPY[,n_days], 0.05) - initial_wealth
+SPYprofit = quantile(simSPY[,n_days], 0.90) - initial_wealth
+SPYmean=mean(simSPY[,n_days])
+
+```
+
+```{r echo=FALSE}
+set.seed("666666")
+
+all_returns = ClCl(TLTa)
+
+all_returns = as.matrix(na.omit(all_returns))
+
+initial_wealth = 100000
+simTLT = foreach(i=1:5000, .combine='rbind') %do% {
+	total_wealth = initial_wealth
+	holdings = total_wealth
+	n_days = 20
+	wealthtracker = rep(0, n_days)
+	for(today in 1:n_days) {
+		return.today = resample(all_returns,1, orig.ids=FALSE)
+		holdings = holdings + holdings*return.today
+		total_wealth = sum(holdings)
+		wealthtracker[today] = total_wealth
+	}
+	wealthtracker
+}
+
+# Calculate 5% value at risk
+TLTVar=quantile(simTLT[,n_days], 0.05) - initial_wealth
+TLTprofit = quantile(simTLT[,n_days], 0.90) - initial_wealth
+TLTmean=mean(simTLT[,n_days])
+
+
+```
+
+```{r echo=FALSE}
+set.seed("666666")
+
+all_returns = ClCl(LQDa)
+
+all_returns = as.matrix(na.omit(all_returns))
+
+initial_wealth = 100000
+simLQD = foreach(i=1:5000, .combine='rbind') %do% {
+	total_wealth = initial_wealth
+	holdings = total_wealth
+	n_days = 20
+	wealthtracker = rep(0, n_days)
+	for(today in 1:n_days) {
+		return.today = resample(all_returns,1, orig.ids=FALSE)
+		holdings = holdings + holdings*return.today
+		total_wealth = sum(holdings)
+		wealthtracker[today] = total_wealth
+	}
+	wealthtracker
+}
+
+# Calculate 5% value at risk
+LQDVar=quantile(simLQD[,n_days], 0.05) - initial_wealth
+LQDprofit = quantile(simLQD[,n_days], 0.90) - initial_wealth
+LQDmean=mean(simLQD[,n_days])
+
+```
+
+```{r echo=FALSE}
+set.seed("666666")
+
+all_returns = ClCl(EEMa)
+
+all_returns = as.matrix(na.omit(all_returns))
+
+initial_wealth = 100000
+simEEM = foreach(i=1:5000, .combine='rbind') %do% {
+	total_wealth = initial_wealth
+	holdings = total_wealth
+	n_days = 20
+	wealthtracker = rep(0, n_days)
+	for(today in 1:n_days) {
+		return.today = resample(all_returns,1, orig.ids=FALSE)
+		holdings = holdings + holdings*return.today
+		total_wealth = sum(holdings)
+		wealthtracker[today] = total_wealth
+	}
+	wealthtracker
+}
+
+# Calculate 5% value at risk
+EEMVar=quantile(simEEM[,n_days], 0.05) - initial_wealth
+EEMprofit = quantile(simEEM[,n_days], 0.90) - initial_wealth
+EEMmean=mean(simEEM[,n_days])
+
+```
+
+```{r echo=FALSE}
+set.seed("666666")
+
+all_returns = ClCl(VNQa)
+
+all_returns = as.matrix(na.omit(all_returns))
+
+initial_wealth = 100000
+simVNQ = foreach(i=1:5000, .combine='rbind') %do% {
+	total_wealth = initial_wealth
+	holdings = total_wealth
+	n_days = 20
+	wealthtracker = rep(0, n_days)
+	for(today in 1:n_days) {
+		return.today = resample(all_returns,1, orig.ids=FALSE)
+		holdings = holdings + holdings*return.today
+		total_wealth = sum(holdings)
+		wealthtracker[today] = total_wealth
+	}
+	wealthtracker
+}
+
+# Calculate 5% value at risk
+VNQVar=quantile(simVNQ[,n_days], 0.05) - initial_wealth
+VNQprofit = quantile(simVNQ[,n_days], 0.90) - initial_wealth
+VNQmean=mean(simVNQ[,n_days])
+
+```
+
+```{r fig.height=15,fig.width=12}
+t <- matrix(c(SPYVar,SPYprofit,TLTVar,TLTprofit,LQDVar,LQDprofit,EEMVar,EEMprofit,VNQVar,VNQprofit),ncol=2,byrow=TRUE)
+colnames(t) <- c("5% Value at Risk","The top 10% potential profit")
+rownames(t) <- c("SPY","TLT","LQD","EEM","VNQ")
+t <- as.table(t)
+t
+
+
+par(mfrow=c(3,2))
+hist(simSPY[,n_days]- initial_wealth, breaks=30,main="Estimated profit/loss at the end day for SPY")
+hist(simTLT[,n_days]- initial_wealth, breaks=30,main="Estimated profit/loss at the end day for TLT")
+hist(simLQD[,n_days]- initial_wealth, breaks=30,main="Estimated profit/loss at the end day for LQD")
+hist(simEEM[,n_days]- initial_wealth, breaks=30,main="Estimated profit/loss at the end day for EEM")
+hist(simVNQ[,n_days]- initial_wealth, breaks=30,main="Estimated profit/loss at the end day for VNQ")
+
+par(mfrow=c(3,3))
+x=1:n_days
+plot(x,simSPY[1,],xlab="Time",ylab="Estimated prices",type = "l",ylim=c(80000,160000),main="Estimated 5000 trends for SPY")
+for(i in 2:5000){
+  lines(x,simSPY[i,],col=i)
+}
+
+plot(x,simTLT[1,],xlab="Time",ylab="Estimated prices",type = "l",ylim=c(80000,160000),main="Estimated 5000 trends for TLT")
+for(i in 2:5000){
+  lines(x,simTLT[i,],col=i)
+}
+
+plot(x,simLQD[1,],xlab="Time",ylab="Estimated prices",type = "l",ylim=c(80000,160000),main="Estimated 5000 trends for LQD")
+for(i in 2:5000){
+  lines(x,simLQD[i,],col=i)
+}
+plot(x,simEEM[1,],xlab="Time",ylab="Estimated prices",type = "l",ylim=c(80000,160000),main="Estimated 5000 trends for EEM")
+for(i in 2:5000){
+  lines(x,simEEM[i,],col=i)
+}
+plot(x,simVNQ[1,],xlab="Time",ylab="Estimated prices",type = "l",ylim=c(80000,160000),main="Estimated 5000 trends for VNQ")
+for(i in 2:5000){
+  lines(x,simVNQ[i,],col=i)
+}
+```
+
+### Observing the distribution of estimated prices and potential trends for these five ETFs, we could conclude that the EEM and VNQ are much more risky than other three ETFs. Among these three, LQD is the safest one with the smalleset variance, followed by TLT. And SPY's variance is the median of these five ETFs.
+
+
+## The even split
+```{r fig.height=7,fig.width=12}
+set.seed("666666")
+
+all_returns = cbind(	ClCl(SPYa),
+								ClCl(TLTa),
+								ClCl(LQDa),
+								ClCl(EEMa),
+								ClCl(VNQa))
+
+all_returns = as.matrix(na.omit(all_returns))
+
+initial_wealth = 100000
+sim1 = foreach(i=1:5000, .combine='rbind') %do% {
+	total_wealth = initial_wealth
+	weights = c(0.2, 0.2, 0.2, 0.2, 0.2)
+	holdings = weights * total_wealth
+	n_days = 20
+	wealthtracker = rep(0, n_days)
+	for(today in 1:n_days) {
+		return.today = resample(all_returns, 1, orig.ids=FALSE)
+		holdings = holdings + holdings*return.today
+		total_wealth = sum(holdings)
+		wealthtracker[today] = total_wealth
+	}
+	wealthtracker
+}
+
+par(mfrow=c(1,2))
+
+hist(sim1[,n_days], 30, main="Estimated prices at the end day")
+
+#profit/loss
+hist(sim1[,n_days]- initial_wealth, breaks=30,main="Estimated profit/loss at the end day")
+
+# Calculate 5% value at risk
+evenmean=mean(sim1[,n_days])
+evenVar=quantile(sim1[,n_days], 0.05) - initial_wealth
+paste("The 5% value at risk is ",evenVar)
+evenprofit = quantile(sim1[,n_days], 0.90) - initial_wealth
+
+par(mfrow=c(1,1))
+
+x=1:n_days
+plot(x,sim1[1,],xlab="Time",ylab="Estimated prices",type = "l",ylim=c(80000,160000),main="Estimated 5000 trends")
+for(i in 2:5000){
+  lines(x,sim1[i,],col=i)
+}
+```
+
+### From the graphs we can see that the even portfolio's distribution is similar to the distribution of SPY, the median of these five ETFs. And it has more outliers with high prices, which might be caused by the investment in EEM and VNQ.
+
+
+
+## The safer choice
+###From the results, we can see that SPY,TLT and LQD, especially LQD, are relatively safer choices. Therefore, we allocate 0.2,0.3,0.5 to SPY,TLT and LQD
+
+```{r fig.height=7,fig.width=12}
+set.seed("666666")
+
+all_returns = cbind(	ClCl(SPYa),
+								ClCl(TLTa),
+								ClCl(LQDa))
+
+all_returns = as.matrix(na.omit(all_returns))
+
+initial_wealth = 100000
+sim1 = foreach(i=1:5000, .combine='rbind') %do% {
+	total_wealth = initial_wealth
+	weights = c(0.2, 0.3, 0.5)
+	holdings = weights * total_wealth
+	n_days = 20
+	wealthtracker = rep(0, n_days)
+	for(today in 1:n_days) {
+		return.today = resample(all_returns, 1, orig.ids=FALSE)
+		holdings = holdings + holdings*return.today
+		total_wealth = sum(holdings)
+		wealthtracker[today] = total_wealth
+	}
+	wealthtracker
+}
+
+par(mfrow=c(1,2))
+
+hist(sim1[,n_days], 30, main="Estimated prices at the end day")
+
+#profit/loss
+hist(sim1[,n_days]- initial_wealth, breaks=30,main="Estimated profit/loss at the end day")
+
+# Calculate 5% value at risk
+safermean=mean(sim1[,n_days])
+saferVar=quantile(sim1[,n_days], 0.05) - initial_wealth
+paste("The 5% value at risk is ",saferVar)
+saferprofit = quantile(sim1[,n_days], 0.90) - initial_wealth
+
+par(mfrow=c(1,1))
+
+x=1:n_days
+plot(x,sim1[1,],xlab="Time",ylab="Estimated prices",type = "l",ylim=c(80000,160000),main="Estimated 5000 trends")
+for(i in 2:5000){
+  lines(x,sim1[i,],col=i)
+}
+```
+
+### From the graphs, we can see the the safer portfolio has much smaller variance even than TLT, just a bit larger than LQD. And it has less outliers with low or high prices than LQD. The probability of significant loss is small but the probability of high return is also small.
+
+
+## The more aggressive choice
+###From the result, we can see that EEM and VNQ are more risky choices, but we still want to keep the SPY to control the risk within acceptable range. Therefore, we allocate 0.4,0.3,0.3 to SPY,EEM and VNQ.
+```{r fig.height=7,fig.width=12}
+set.seed("666666")
+
+all_returns = cbind(	ClCl(SPYa),
+								ClCl(EEMa),
+								ClCl(VNQa))
+
+all_returns = as.matrix(na.omit(all_returns))
+
+initial_wealth = 100000
+sim1 = foreach(i=1:5000, .combine='rbind') %do% {
+	total_wealth = initial_wealth
+	weights = c(0.4,0.3,0.3)
+	holdings = weights * total_wealth
+	n_days = 20
+	wealthtracker = rep(0, n_days)
+	for(today in 1:n_days) {
+		return.today = resample(all_returns, 1, orig.ids=FALSE)
+		holdings = holdings + holdings*return.today
+		total_wealth = sum(holdings)
+		wealthtracker[today] = total_wealth
+	}
+	wealthtracker
+}
+
+par(mfrow=c(1,2))
+
+hist(sim1[,n_days], 30, main="Estimated prices at the end day")
+
+#profit/loss
+hist(sim1[,n_days]- initial_wealth, breaks=30,main="Estimated profit/loss at the end day")
+
+# Calculate 5% value at risk
+aggmean=mean(sim1[,n_days])
+aggVar=quantile(sim1[,n_days], 0.05) - initial_wealth
+paste("The 5% value at risk is ",aggVar)
+aggprofit = quantile(sim1[,n_days], 0.90) - initial_wealth
+
+par(mfrow=c(1,1))
+
+x=1:n_days
+plot(x,sim1[1,],xlab="Time",ylab="Estimated prices",type = "l",ylim=c(80000,160000),main="Estimated 5000 trends")
+for(i in 2:5000){
+  lines(x,sim1[i,],col=i)
+}
+```
+
+### From the graphs, we can see that this portfolio has much larger variance.It has chance to gain significant high return, but it is also more risky than other portfolios.
+
+## Comparison of all portfolios for decision making
+```{r }
+t <- matrix(c(SPYVar,SPYmean,SPYprofit,TLTVar,TLTmean,TLTprofit,LQDVar,LQDmean,LQDprofit,EEMVar,EEMmean,EEMprofit,VNQVar,VNQmean,VNQprofit,evenVar,evenmean,evenprofit,saferVar,safermean,saferprofit,aggVar,aggmean,aggprofit),ncol=3,byrow=TRUE)
+colnames(t) <- c("5% Value at Risk","Expected return","The top 10% potential profit")
+rownames(t) <- c("SPY","TLT","LQD","EEM","VNQ","Even","Safer","Aggressive")
+t <- as.table(t)
+t
+```
+
+
+# Market Segmentation
+## Clustering
+```{r message=FALSE,warning=FALSE}
+library(corrplot)
+social=read.csv('marketing.csv')
+# correlation of interests
+interests=social[2:37]
+interests_s=scale(interests)
+corrplot(cor(interests_s),type = 'upper',order = 'hclust')
+```
+
+### From the correlation plot, we can see that politics and news, politics and travel and computer, online game and coffee uni, beauty and cooking and fashion, parenting and family along with school and sports fandom and religion, photo-sharing and chatter and shopping are the interest groups that are highly correlated.
+
+```{r}
+# clustering
+# the number of clusters using elbow method
+set.seed(666666)
+k.max=15
+wss=sapply(1:k.max,function(k){kmeans(interests_s, k, nstart=50,iter.max = 15 )$tot.withinss})
+wss
+plot(1:k.max, wss,
+     type="b", pch = 19, frame = FALSE, 
+     xlab="Number of clusters K",
+     ylab="Total within-clusters sum of squares")
+# we find 5 clusters is the best
+cluster=kmeans(interests_s,5)
+
+
+library(cluster)
+clusplot(interests_s,cluster$cluster,main='the Cluster solution',color=TRUE, shade=TRUE, labels=2, lines=0)
+```
+
+### K-means
+### Using K-means, we were able to cluster 5 groups of users that share the common interest or similar feature. However, in our case, we are trying to find the market segment---finding groups of features rather than the similar users, and K-means in our cases, cannot visualize groups of features. Besides, K-means is not able to lower the dimensions of as PCA does. Thus, we decided to further use PCA to probe the groups of correlate features, which help firm form advertising campaign more sharply to its target audience.  
+
+
+## PCA
+```{r warning=FALSE,message=FALSE}
+social=read.csv('marketing.csv')
+# correlation of interests
+interests=social[,c(1,3:5,7:37)]
+rownames(interests) = interests$X
+interests = interests[,-1]
+colnames(interests)
+```
+
+### Since "chatter" and "uncategorized" variables are sometimes used sparingly, we removed the two variables in our analysis.
+
+```{r warning=FALSE,message=FALSE}
+library("FactoMineR")
+library("factoextra")
+library(corrplot)
+
+m.pca = PCA(interests, graph = FALSE)
+```
+
+### First, we try to get the eigenvalues to measure the variation of each dimensions. Therefore we are able to choose how many dimensions we need.
+
+```{r }
+m.eigmal = get_eigenvalue(m.pca)
+m.eigmal
+fviz_eig(m.pca, addlabels = TRUE, ylim = c(0, 50))
+
+```
+
+### With PCA, we found 5 components can explain most of the variation in the original data from the plot. Together with those 5 dimensions, we have 41.8% representation of the total variable. One interesting point is that in the first dimension, the coefficient are positive, and in the second dimension, several features stand out. 
+
+
+
+```{r }
+m.var = get_pca_var(m.pca)
+head(m.var$coord)
+
+fviz_pca_var(m.pca, col.var = "black")
+
+```
+
+### With PCA, we found 5 components can explain most of the variation in the original data from the plot. Together with those 5 dimensions, we have 41.8% representation of the total variable. One interesting point is that in the first dimension, the coefficient are positive, and in the second dimension, several features stand out. 
+
+```{R }
+corrplot(m.var$cos2, is.corr=FALSE)
+
+fviz_cos2(m.pca, choice = "var", axes = 1:2)
+```
+
+### To better assist with visualization of the graph above, this graph validates our findings that sports_fandom, food, family, religion, parenting, cooking and school stands out in dimension 1 and 2. On the contrary, current events, dating, online-gaming, art etc. are the least significant variable that can represent the twitter follower. 
+
+
+```{r }
+fviz_pca_var(m.pca, col.var = "cos2",
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"), 
+             repel = TRUE # Avoid text overlapping
+             )
+```
+
+### In this plot, we combine the coordinates and significant levels of each variables to directly show the market segments that stand out. 
+### Based on these analysis, a possible interesting fact is that most of these twitter followers are relatively elder or already have family, because they focus more on traditional topics, such as religion, sports, parenting and cooking. From another aspect, online gaming, tv&film and dating, which are popular topics among younger people, are not as representative as above segments.
